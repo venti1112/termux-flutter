@@ -19,6 +19,11 @@ import urllib.parse
 from datetime import datetime, timezone
 from loguru import logger
 
+class _Download404Error(Exception):
+    """Raised when a package download returns HTTP 404 (stale lock entry)."""
+    pass
+
+
 def _parse_deps(dep_str):
     if not dep_str:
         return []
@@ -125,6 +130,8 @@ async def _download(sess, url, sha256_expected, dst):
     except Exception as e:
         if isinstance(e, RuntimeError):
             raise
+        if isinstance(e, aiohttp.ClientResponseError) and e.status == 404:
+            raise _Download404Error(f'{name}: {url}') from e
         raise RuntimeError(f'✗ 下載或驗證失敗 {name}: {e}')
 
 
@@ -134,12 +141,16 @@ async def _spawn(tasks):
     return list(await asyncio.gather(*tasks))
 
 
-async def _download_packages(out, pkgs_info):
-    timeout = aiohttp.ClientTimeout(total=500)
-    conn = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
-    async with aiohttp.ClientSession(timeout=timeout, connector=conn) as sess:
+async def _download_packages(out, pkgs_info, sess=None):
+    if sess is not None:
         return await _spawn([
             _download(sess, pkg['url'], pkg.get('sha256'), out) for pkg in pkgs_info
+        ])
+    timeout = aiohttp.ClientTimeout(total=500)
+    conn = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    async with aiohttp.ClientSession(timeout=timeout, connector=conn) as new_sess:
+        return await _spawn([
+            _download(new_sess, pkg['url'], pkg.get('sha256'), out) for pkg in pkgs_info
         ])
 
 
@@ -570,6 +581,24 @@ class Sysroot:
         logger.info(f'✓ Sysroot for {arch} looks valid (tree_hash verified: {actual_hash}).')
         return True
 
+    def _update_lock(self, arch, arch_name, pkgs_info):
+        """Update lock file packages after 404 fallback re-resolution."""
+        lock_data = {}
+        if self.lock_file.exists():
+            try:
+                with open(self.lock_file, 'r', encoding='utf-8') as f:
+                    lock_data = json.load(f)
+            except Exception:
+                pass
+        entry = lock_data.get(arch) or lock_data.get(arch_name) or {}
+        pkgs_dict = {pkg['name']: pkg for pkg in pkgs_info}
+        entry['packages'] = pkgs_dict
+        lock_data[arch] = entry
+        if arch != arch_name:
+            lock_data[arch_name] = entry
+        with open(self.lock_file, 'w', encoding='utf-8') as f:
+            json.dump(lock_data, f, indent=2, sort_keys=True)
+
     def build(self, arch: str = 'arm64', locked: bool = True):
         """建立 sysroot，預設 shadow 啟用 --locked"""
         arch_name = utils.termux_arch(arch)
@@ -616,6 +645,7 @@ class Sysroot:
 
         async def _do_build():
             nonlocal pkgs_info, expected_tree_hash
+            fallback_resolved = False
             if not locked:
                 timeout = aiohttp.ClientTimeout(total=500)
                 conn = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
@@ -630,16 +660,33 @@ class Sysroot:
 
             try:
                 with tempfile.TemporaryDirectory() as tmp:
-                    debs = await _download_packages(tmp, pkgs_info)
+                    try:
+                        timeout = aiohttp.ClientTimeout(total=500)
+                        conn = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                        async with aiohttp.ClientSession(timeout=timeout, connector=conn) as sess:
+                            debs = await _download_packages(tmp, pkgs_info, sess=sess)
+                    except _Download404Error as e:
+                        if not locked:
+                            raise
+                        fallback_resolved = True
+                        logger.warning(f'⚠ Locked package stale (404): {e}. Re-resolving from repo...')
+                        timeout = aiohttp.ClientTimeout(total=500)
+                        conn = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+                        async with aiohttp.ClientSession(timeout=timeout, connector=conn) as sess:
+                            resolved = await _resolve_packages(sess, arch, self.data)
+                            pkgs_info = list(resolved.values())
+                            debs = await _download_packages(tmp, pkgs_info, sess=sess)
+                        self._update_lock(arch, arch_name, pkgs_info)
+                        logger.info(f'✓ Lock file updated after 404 fallback for {arch}.')
                     for deb in debs:
                         _extract(staging_out, deb)
 
                 _normalize_pthread_shim(staging_out)
                 _apply_sysroot_transformations(staging_out)
 
-                # Validate tree_hash if locked
+                # Validate tree_hash if locked (skip if fallback resolved stale entries)
                 actual_tree_hash = compute_tree_hash(staging_out)
-                if locked:
+                if locked and not fallback_resolved:
                     if not expected_tree_hash or actual_tree_hash != expected_tree_hash:
                         raise RuntimeError(
                             f'Sysroot tree_hash mismatch: expected {expected_tree_hash}, got {actual_tree_hash}'

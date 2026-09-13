@@ -44,14 +44,14 @@
         "version": "1.2.0"
       },
       "ca-certificates": {
-        "archive_path": "pool/main/c/ca-certificates/ca-certificates_1:2026.07.16_all.deb",
+        "archive_path": "pool/main/c/ca-certificates/ca-certificates_1:2026.08.13_all.deb",
         "dist": "stable",
         "name": "ca-certificates",
         "repo": "https://packages-cf.termux.dev/apt/termux-main/",
-        "sha256": "93dc49a8009012c29510081b8f07f30c57af9b10b1dae4f541231d8ee785b37a",
-        "size": 104212,
-        "url": "https://packages-cf.termux.dev/apt/termux-main/pool/main/c/ca-certificates/ca-certificates_1:2026.07.16_all.deb",
-        "version": "1:2026.07.16"
+        "sha256": "8e894fb885da738b4ca9a7932703e414d730fa32e78aba33046a747822547d5a",
+        "size": 105404,
+        "url": "https://packages-cf.termux.dev/apt/termux-main/pool/main/c/ca-certificates/ca-certificates_1:2026.08.13_all.deb",
+        "version": "1:2026.08.13"
       },
       "coreutils": {
         "archive_path": "pool/main/c/coreutils/coreutils_9.11-1_aarch64.deb",
@@ -901,14 +901,14 @@
         "version": "1.2.0"
       },
       "ca-certificates": {
-        "archive_path": "pool/main/c/ca-certificates/ca-certificates_1:2026.07.16_all.deb",
+        "archive_path": "pool/main/c/ca-certificates/ca-certificates_1:2026.08.13_all.deb",
         "dist": "stable",
         "name": "ca-certificates",
         "repo": "https://packages-cf.termux.dev/apt/termux-main/",
-        "sha256": "93dc49a8009012c29510081b8f07f30c57af9b10b1dae4f541231d8ee785b37a",
-        "size": 104212,
-        "url": "https://packages-cf.termux.dev/apt/termux-main/pool/main/c/ca-certificates/ca-certificates_1:2026.07.16_all.deb",
-        "version": "1:2026.07.16"
+        "sha256": "8e894fb885da738b4ca9a7932703e414d730fa32e78aba33046a747822547d5a",
+        "size": 105404,
+        "url": "https://packages-cf.termux.dev/apt/termux-main/pool/main/c/ca-certificates/ca-certificates_1:2026.08.13_all.deb",
+        "version": "1:2026.08.13"
       },
       "coreutils": {
         "archive_path": "pool/main/c/coreutils/coreutils_9.11-1_aarch64.deb",
